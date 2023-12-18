@@ -34,7 +34,8 @@ public class Chip8 extends Application {
         Scene scene = new Scene(root);
         stage.setScene(scene);
 
-        KeyFrame kf = new KeyFrame(Duration.millis(3), e -> {
+        // CPU frequency
+        KeyFrame kf = new KeyFrame(Duration.millis(1), e -> {
             memory.fetch();
             memory.execute();
 
@@ -42,14 +43,21 @@ public class Chip8 extends Application {
                 screen.draw();
                 memory.setUpdateScreen(false);
             }
+
+            memory.updateDelayTimer();
         });
+
+        // Timer frequency
+        //KeyFrame timer = new KeyFrame(Duration.millis(16.67), e-> {
+            //memory.updateDelayTimer();
+        //});
 
         timeline = new Timeline();
         timeline.setCycleCount(Timeline.INDEFINITE);
         timeline.setAutoReverse(true);
-        timeline.getKeyFrames().add(kf);
+        timeline.getKeyFrames().addAll(kf);//, timer);
 
-        loadProgram("roms/ibm.ch8");
+        loadProgram("roms/3-corax+.ch8");
 
         stage.show();
     }

@@ -51,6 +51,11 @@ public class Memory {
      */
     private boolean updateScreen;
 
+
+    private int delayTimer;
+
+    private int cycleCount;
+
     /**
      * Constructor for our memory class.
      */
@@ -59,6 +64,8 @@ public class Memory {
         this.V = new int[NUM_REGISTERS];
         this.screen = screen;
         this.updateScreen = false;
+        this.delayTimer = 0;
+        this.cycleCount = 0;
 
         stack = new Stack<>();
         pc = MEM_START;
@@ -143,8 +150,8 @@ public class Memory {
             }
 
             case DISPLAY -> {
-                int x = V[((opcode & XNXX_MASK) >> 8)];
-                int y = V[((opcode & XXNX_MASK) >> 4)];
+                int vx = V[((opcode & XNXX_MASK) >> 8)];
+                int vy = V[((opcode & XXNX_MASK) >> 4)];
                 int height = (opcode & XXXN_MASK);
                 V[0xF] = 0;
 
@@ -154,8 +161,8 @@ public class Memory {
                     for (int xVal = 0; xVal < 8; xVal++) {
                         if ((spriteData & (SPRITE_MASK >>> xVal)) != 0) {
 
-                            int xCoord = x + xVal;
-                            int yCoord = y + yVal;
+                            int xCoord = vx + xVal;
+                            int yCoord = vy + yVal;
 
                             if (screen.getPixel(xCoord, yCoord) == 1) {
                                 V[0xF] = 1;
@@ -177,6 +184,129 @@ public class Memory {
                 yield SUBROUTINE_JUMP;
             }
 
+            case SKIP_IF_VX -> {
+                int vx = V[((opcode & XNXX_MASK) >> 8)];
+                int value = (opcode & NN_MASK);
+
+                if (value == vx) {
+                    pc += 2;
+                }
+
+                yield SKIP_IF_VX;
+            }
+
+            case SKIP_IF_NOT_VX -> {
+                int vx = V[((opcode & XNXX_MASK) >> 8)];
+                int value = (opcode & NN_MASK);
+
+                if (value != vx) {
+                    pc += 2;
+                }
+
+                yield SKIP_IF_NOT_VX;
+            }
+
+            case SKIP_IF_VX_VY -> {
+                int vx = V[((opcode & XNXX_MASK) >> 8)];
+                int vy = V[((opcode & XXNX_MASK) >> 4)];
+
+                if (vx == vy) {
+                    opcode += 2;
+                }
+
+                yield SKIP_IF_VX_VY;
+            }
+
+            case SKIP_IF_NOT_VX_VY -> {
+                int vx = V[((opcode & XNXX_MASK) >> 8)];
+                int vy = V[((opcode & XXNX_MASK) >> 4)];
+
+                if (vx != vy) {
+                    opcode += 2;
+                }
+
+                yield SKIP_IF_NOT_VX_VY;
+            }
+
+            case LOGICAL_INSTR -> {
+                int x = ((opcode & XNXX_MASK) >> 8);
+                int y = ((opcode & XXNX_MASK) >> 4);
+
+                // SET VX to VY
+                if ((opcode & 0xF) == 0) {
+                    V[x] = V[y];
+                    yield LOGICAL_INSTR;
+                }
+
+                // Binary OR
+                if ((opcode & 0xF) == 1) {
+                    V[x] |= V[y];
+                    yield LOGICAL_INSTR;
+                }
+
+                // Binary and
+                if ((opcode & 0xF) == 2) {
+                    V[x] &= V[y];
+                    yield LOGICAL_INSTR;
+                }
+
+                // Binary XOR
+                if ((opcode & 0xF) == 3) {
+                    V[x] ^= V[y];
+                    yield LOGICAL_INSTR;
+                }
+
+                // Add with carry flag
+                if ((opcode & 0xF) == 4) {
+                    int value = V[x] + V[y];
+
+                    // Overflow with carry
+                    V[0xF] = value > 0xFF ? 1 : 0;
+                    V[x] = (value & 0xFF);
+
+                    yield LOGICAL_INSTR;
+                }
+
+                // Subtract VX - VY
+                if ((opcode & 0xF) == 5) {
+                    if (V[x] > V[y]) {
+                        V[0xF] = 1;
+                    } else {
+                        V[0xF] = 0;
+                    }
+
+                    V[x] = ((V[x] - V[y]) & 0xFF);
+                    yield LOGICAL_INSTR;
+                }
+
+                // Shift
+                if ((opcode & 0xF) == 6) {
+                    V[0xF] = V[x] & 0x1;
+                    V[x] = V[x] >>> 1;
+                    yield LOGICAL_INSTR;
+                }
+
+                // Subtract VY - VX
+                if ((opcode & 0xF) == 7) {
+                    if (V[y] > V[x]) {
+                        V[0xF] = 1;
+                    } else {
+                        V[0xF] = 0;
+                    }
+
+                    V[x] = ((V[y] - V[x]) & 0xFF);
+                    yield LOGICAL_INSTR;
+                }
+
+                if ((opcode & 0xF) == 0xE) {
+                    V[0xF] = (V[x] & 0x80) >>> 7;
+                    V[x] = ((V[x] << 1) & 0xFF);
+                    yield LOGICAL_INSTR;
+                }
+
+                yield LOGICAL_INSTR;
+            }
+
             default -> 0;
         };
     }
@@ -191,6 +321,28 @@ public class Memory {
 
     /**
      *
+     * @return the value of the delay timer.
+     */
+    public int getDelayTimer() {
+        return delayTimer;
+    }
+
+    /**
+     * Update the delay timer if it is greater than zero.
+     */
+    public void updateDelayTimer() {
+        cycleCount += 1;
+        if (cycleCount > 16) {
+            cycleCount = 0;
+
+            if (this.delayTimer > 0) {
+                this.delayTimer -= 1;
+            }
+        }
+    }
+
+    /**
+     *
      * @param updateScreen new value for our update screen flag.
      */
     public void setUpdateScreen(boolean updateScreen) {
@@ -201,16 +353,23 @@ public class Memory {
     //                CONSTANTS                 //
     //////////////////////////////////////////////
 
+    public static final int CLEAR_SCREEN = 0xE0;
+    public static final int SUBROUTINE_RESTORE = 0xEE;
     public static final int BYTE_MASK = 0xFF;
     public static final int MEM_START = 0x200;
-    public static final int CLEAR_SCREEN = 0x00E0;
     public static final int JUMP = 0x1000;
+    public static final int SUBROUTINE_JUMP = 0x2000;
+    public static final int SKIP_IF_VX = 0x3000;
+    public static final int SKIP_IF_NOT_VX = 0x4000;
+    public static final int SKIP_IF_VX_VY = 0x5000;
     public static final int SET_REGISTER = 0x6000;
     public static final int ADD_VALUE = 0x7000;
+    public static final int LOGICAL_INSTR = 0x8000;
+    public static final int SKIP_IF_NOT_VX_VY = 0x9000;
     public static final int SET_INDEX = 0xA000;
     public static final int DISPLAY = 0xD000;
-    public static final int SUBROUTINE_JUMP = 0x2000;
-    public static final int SUBROUTINE_RESTORE = 0xEE;
+    public static final int FUNCTIONS = 0xF000;
+
 
     public static final int INSTR_MASK = 0xF000;
     public static final int NNN_MASK = 0x0FFF;
