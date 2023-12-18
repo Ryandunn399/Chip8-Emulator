@@ -21,7 +21,7 @@ public class Memory {
      * Chip-8 stack.  The "stack pointer" is already kept updated in the
      * java data structure.
      */
-    private final Stack<Short> stack;
+    private final Stack<Integer> stack;
 
     private final Screen screen;
 
@@ -101,6 +101,11 @@ public class Memory {
             return CLEAR_SCREEN;
         }
 
+        if (opcode == SUBROUTINE_RESTORE) {
+            pc = stack.pop();
+            return SUBROUTINE_RESTORE;
+        }
+
         return switch (opcode & INSTR_MASK) {
             case JUMP -> {
                 pc = (opcode & NNN_MASK);
@@ -165,6 +170,13 @@ public class Memory {
                 yield DISPLAY;
             }
 
+            case SUBROUTINE_JUMP -> {
+                int addr = (opcode & NNN_MASK);
+                stack.push(pc);
+                pc = addr;
+                yield SUBROUTINE_JUMP;
+            }
+
             default -> 0;
         };
     }
@@ -197,7 +209,8 @@ public class Memory {
     public static final int ADD_VALUE = 0x7000;
     public static final int SET_INDEX = 0xA000;
     public static final int DISPLAY = 0xD000;
-
+    public static final int SUBROUTINE_JUMP = 0x2000;
+    public static final int SUBROUTINE_RESTORE = 0xEE;
 
     public static final int INSTR_MASK = 0xF000;
     public static final int NNN_MASK = 0x0FFF;
